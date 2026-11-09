@@ -10,11 +10,10 @@
   h1 { text-align: center; color: #e91e63; margin-bottom: 16px; font-size: 22px; }
   h2 { font-size: 18px; margin-bottom: 10px; color: #444; }
 
-  /* ---- PROJECT SELECTION SCREEN ---- */
   .project-screen { display: block; }
   .project-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; }
   .project-card { background: white; border-radius: 12px; padding: 16px; box-shadow: 0 2px 6px rgba(0,0,0,0.06); cursor: pointer; transition: all 0.2s; }
-  .project-card:hover { transform: translateY(-2px); box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+  .project-card:hover { transform: translateY(-2px); }
   .project-name { font-weight: 600; font-size: 17px; margin-bottom: 4px; }
   .project-meta { font-size: 13px; color: #777; }
   .project-progress { height: 6px; background: #eee; border-radius: 3px; margin-top: 8px; overflow: hidden; }
@@ -25,9 +24,8 @@
   .new-project-box { background: white; border-radius: 12px; padding: 20px; box-shadow: 0 2px 6px rgba(0,0,0,0.06); }
   .new-project-box input { width: 100%; padding: 12px; font-size: 15px; border: 2px solid #eee; border-radius: 8px; margin: 8px 0; outline: none; }
   .new-project-box input:focus { border-color: #e91e63; }
-  .primary-btn { background: #e91e63; color: white; border: none; padding: 10px 20px; border-radius: 8px; font-size: 15px; cursor: pointer; width: 100%; margin-top: 8px; }
+  .primary-btn { background: #e91e63; color: white; border: none; padding: 12px 20px; border-radius: 8px; font-size: 15px; cursor: pointer; width: 100%; margin-top: 8px; }
 
-  /* ---- TRACKER SCREEN ---- */
   .tracker-screen { display: none; }
   .back-bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
   .back-btn { background: none; border: none; color: #e91e63; font-size: 15px; cursor: pointer; padding: 0; }
@@ -66,13 +64,9 @@
 </head>
 <body>
 
-<!-- ============= PROJECTS SCREEN ============= -->
 <div class="project-screen" id="project-screen">
   <h1>🎨 My PBN Projects</h1>
-
-  <div class="project-list" id="project-list">
-    <!-- Projects will show here -->
-  </div>
+  <div class="project-list" id="project-list"></div>
 
   <div class="new-project-box">
     <h2>➕ Start New Project</h2>
@@ -81,7 +75,6 @@
   </div>
 </div>
 
-<!-- ============= TRACKER SCREEN ============= -->
 <div class="tracker-screen" id="tracker-screen">
   <div class="back-bar">
     <button class="back-btn" id="back-to-projects">← All Projects</button>
@@ -130,16 +123,13 @@
 </div>
 
 <script>
-// ---- DATA ----
 let projects = {};
 let currentProjectId = null;
 
-// ---- HELPERS ----
 function generateId() { return Date.now().toString(36) + Math.random().toString(36).substr(2); }
 function saveProjects() { localStorage.setItem('pbnProjects', JSON.stringify(projects)); }
-function loadProjects() { const saved = localStorage.getItem('pbnProjects'); if (saved) projects = JSON.parse(saved); }
+function loadProjects() { const s = localStorage.getItem('pbnProjects'); if (s) projects = JSON.parse(s); }
 
-// ---- SCREEN SWITCHING ----
 function showProjectScreen() {
   document.getElementById('project-screen').style.display = 'block';
   document.getElementById('tracker-screen').style.display = 'none';
@@ -154,131 +144,75 @@ function showTrackerScreen(projectId) {
   loadProjectData();
 }
 
-// ---- RENDER PROJECT LIST ----
+function escapeHtml(t) { const d=document.createElement('div');d.textContent=t;return d.innerHTML; }
+
 function renderProjectList() {
   const list = document.getElementById('project-list');
   list.innerHTML = '';
+  const ids = Object.keys(projects).sort((a,b)=>projects[b].createdAt-projects[a].createdAt);
+  if (!ids.length) { list.innerHTML = '<p style="text-align:center;color:#888;padding:20px;">No projects yet. Create one below! 🎨</p>'; return; }
   
-  const projectIds = Object.keys(projects).sort((a, b) => projects[b].createdAt - projects[a].createdAt);
-  
-  if (projectIds.length === 0) {
-    list.innerHTML = '<p style="text-align:center; color:#888; padding:20px;">No projects yet. Create one below! 🎨</p>';
-    return;
-  }
-  
-  projectIds.forEach(id => {
+  ids.forEach(id => {
     const p = projects[id];
-    const percent = p.totalSections ? Math.round((p.marks.length / p.totalSections) * 100) : 0;
-    
+    const pc = p.totalSections ? Math.round((p.marks.length/p.totalSections)*100) : 0;
     const card = document.createElement('div');
     card.className = 'project-card';
     card.innerHTML = `
       <div class="project-name">${escapeHtml(p.name)}</div>
-      <div class="project-meta">${p.marks.length} marked done${p.totalSections ? ' / ' + p.totalSections + ' sections' : ' — set total'}</div>
-      <div class="project-progress">
-        <div class="project-progress-fill" style="width: ${percent}%"></div>
-      </div>
-      <div class="project-actions">
-        <button class="delete-btn" data-id="${id}">🗑️ Delete</button>
-      </div>
+      <div class="project-meta">${p.marks.length} done${p.totalSections ? ' / '+p.totalSections : ''}</div>
+      <div class="project-progress"><div class="project-progress-fill" style="width:${pc}%"></div></div>
+      <div class="project-actions"><button class="delete-btn" data-id="${id}">🗑️ Delete</button></div>
     `;
-    
-    // Click to open project
-    card.addEventListener('click', (e) => {
-      if (!e.target.classList.contains('delete-btn')) showTrackerScreen(id);
-    });
-    
-    // Delete button
-    card.querySelector('.delete-btn').addEventListener('click', (e) => {
+    card.addEventListener('click', e=>{ if(!e.target.classList.contains('delete-btn')) showTrackerScreen(id); });
+    card.querySelector('.delete-btn').addEventListener('click', e=>{
       e.stopPropagation();
-      if (confirm(`Delete "${p.name}"? This cannot be undone.`)) {
-        delete projects[id];
-        saveProjects();
-        renderProjectList();
-      }
+      if(confirm(`Delete "${p.name}"? Cannot undo.`)){ delete projects[id]; saveProjects(); renderProjectList(); }
     });
-    
     list.appendChild(card);
   });
 }
 
-function escapeHtml(text) {
-  const div = document.createElement('div');
-  div.textContent = text;
-  return div.innerHTML;
-}
-
-// ---- CREATE NEW PROJECT ----
-document.getElementById('create-project').addEventListener('click', () => {
-  const nameInput = document.getElementById('new-project-name');
-  const name = nameInput.value.trim();
-  if (!name) { alert('Please enter a project name!'); return; }
-  
+document.getElementById('create-project').addEventListener('click', ()=>{
+  const name = document.getElementById('new-project-name').value.trim();
+  if(!name) { alert('Please enter a name!'); return; }
   const id = generateId();
-  projects[id] = {
-    id,
-    name,
-    createdAt: Date.now(),
-    imageData: null,
-    totalSections: null,
-    marks: []
-  };
+  projects[id] = { id, name, createdAt: Date.now(), imageData: null, totalSections: null, marks: [] };
   saveProjects();
-  nameInput.value = '';
+  document.getElementById('new-project-name').value = '';
   showTrackerScreen(id);
 });
 
-// ---- LOAD/SAVE CURRENT PROJECT ----
+document.getElementById('back-to-projects').addEventListener('click', ()=>{
+  saveProjects();
+  showProjectScreen();
+});
+
 function loadProjectData() {
   const p = projects[currentProjectId];
-  if (!p) return;
-  
+  if(!p) return;
   document.getElementById('current-project-name').textContent = p.name;
-  
-  // Reset UI state
   document.getElementById('upload-area').classList.remove('hidden');
   document.getElementById('total-section').classList.add('hidden');
   document.getElementById('stats-section').classList.add('hidden');
   document.getElementById('instructions-section').classList.add('hidden');
   document.getElementById('image-container').classList.add('hidden');
   document.getElementById('btn-bar').classList.add('hidden');
-  
-  // Clear old markers
-  document.querySelectorAll('.pbn-marker').forEach(el => el.remove());
-  
-  if (p.imageData) {
-    document.getElementById('canvas-image').src = p.imageData;
-    document.getElementById('upload-area').classList.add('hidden');
-    document.getElementById('total-section').classList.remove('hidden');
-    document.getElementById('instructions-section').classList.remove('hidden');
-    document.getElementById('image-container').classList.remove('hidden');
+  document.querySelectorAll('.pbn-marker').forEach(el=>el.remove());
+
+  if(p.imageData){
+    canvasImage.src = p.imageData;
+    uploadArea.classList.add('hidden');
+    totalSection.classList.remove('hidden');
+    instructionsSection.classList.remove('hidden');
+    imageContainer.classList.remove('hidden');
     document.getElementById('btn-bar').classList.remove('hidden');
-    document.getElementById('total-input').value = p.totalSections || '';
-    
-    if (p.totalSections) {
-      document.getElementById('total-display').textContent = p.totalSections;
-      document.getElementById('total-input').value = p.totalSections;
-      document.getElementById('stats-section').classList.remove('hidden');
-    }
-    
+    totalInput.value = p.totalSections || '';
+    if(p.totalSections){ totalDisplayEl.textContent = p.totalSections; statsSection.classList.remove('hidden'); }
     updateStats();
-    setTimeout(drawMarks, 100);
-  } else {
-    document.getElementById('canvas-image').src = '';
-  }
+    setTimeout(drawMarks, 50);
+  } else { canvasImage.src = ''; }
 }
 
-function saveCurrentProject() {
-  saveProjects();
-}
-
-// ---- BACK BUTTON ----
-document.getElementById('back-to-projects').addEventListener('click', () => {
-  if (currentProjectId) saveCurrentProject();
-  showProjectScreen();
-});
-
-// ---- TRACKER FUNCTIONS ----
 const fileInput = document.getElementById('file-input');
 const uploadArea = document.getElementById('upload-area');
 const totalSection = document.getElementById('total-section');
@@ -295,50 +229,97 @@ const progressFill = document.getElementById('progress-fill');
 const resetMarksBtn = document.getElementById('reset-marks');
 const clearImageBtn = document.getElementById('clear-image');
 
-uploadArea.addEventListener('click', () => fileInput.click());
-
-fileInput.addEventListener('change', (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
-  
-  const reader = new FileReader();
-  reader.onload = (event) => {
-    const dataUrl = event.target.result;
-    projects[currentProjectId].imageData = dataUrl;
+uploadArea.addEventListener('click', ()=>fileInput.click());
+fileInput.addEventListener('change', e=>{
+  const f = e.target.files[0]; if(!f) return;
+  const r = new FileReader();
+  r.onload = ev=>{
+    projects[currentProjectId].imageData = ev.target.result;
+    projects[currentProjectId].marks = [];
     saveProjects();
-    canvasImage.src = dataUrl;
+    canvasImage.src = ev.target.result;
     uploadArea.classList.add('hidden');
     totalSection.classList.remove('hidden');
     instructionsSection.classList.remove('hidden');
     imageContainer.classList.remove('hidden');
     document.getElementById('btn-bar').classList.remove('hidden');
-    projects[currentProjectId].marks = [];
-    saveProjects();
     updateStats();
   };
-  reader.readAsDataURL(file);
+  r.readAsDataURL(f);
 });
 
-setTotalBtn.addEventListener('click', () => {
-  const val = parseInt(totalInput.value, 10);
-  if (!val || val < 1) { alert('Please enter a valid number!'); return; }
-  projects[currentProjectId].totalSections = val;
+setTotalBtn.addEventListener('click', ()=>{
+  const v = parseInt(totalInput.value,10);
+  if(!v||v<1){alert('Enter a valid number');return;}
+  projects[currentProjectId].totalSections = v;
   saveProjects();
-  totalDisplayEl.textContent = val;
+  totalDisplayEl.textContent = v;
   statsSection.classList.remove('hidden');
   updateStats();
 });
 
-canvasImage.addEventListener('click', (e) => {
-  if (!projects[currentProjectId].imageData) return;
-  
+canvasImage.addEventListener('click', e=>{
+  if(!projects[currentProjectId].imageData) return;
   const rect = canvasImage.getBoundingClientRect();
-  const x = e.clientX - rect.left;
-  const y = e.clientY - rect.top;
-  const relX = x / rect.width;
-  const relY = y / rect.height;
-  
+  const rx = (e.clientX - rect.left)/rect.width;
+  const ry = (e.clientY - rect.top)/rect.height;
   const marks = projects[currentProjectId].marks;
-  const threshold = 0.025;
-  let foundIndex = -1;
-  for (let i = 0; i < marks.length; i
+  const t = 0.025;
+  let idx = -1;
+  for(let i=0;i<marks.length;i++){
+    if(Math.abs(marks[i].x-rx)<t && Math.abs(marks[i].y-ry)<t){ idx=i; break; }
+  }
+  if(idx>=0) marks.splice(idx,1);
+  else marks.push({x:rx,y:ry});
+  saveProjects();
+  updateStats();
+  drawMarks();
+});
+
+function updateStats(){
+  const m = projects[currentProjectId]?.marks||[];
+  const t = projects[currentProjectId]?.totalSections;
+  completedEl.textContent = m.length;
+  if(t){
+    const pct = Math.round((m.length/t)*100);
+    percentageEl.textContent = pct;
+    progressFill.style.width = Math.min(pct,100)+'%';
+  } else {
+    percentageEl.textContent = '—';
+    progressFill.style.width = '0%';
+  }
+}
+
+function drawMarks(){
+  document.querySelectorAll('.pbn-marker').forEach(el=>el.remove());
+  if(!projects[currentProjectId]) return;
+  const rect = canvasImage.getBoundingClientRect();
+  projects[currentProjectId].marks.forEach(m=>{
+    const dot = document.createElement('div');
+    dot.className = 'pbn-marker';
+    dot.style.cssText = `position:absolute;left:${m.x*rect.width-8}px;top:${m.y*rect.height-8}px;width:16px;height:16px;background:#22c55e;border-radius:50%;border:2px solid white;box-shadow:0 2px 4px rgba(0,0,0,0.2);pointer-events:none;`;
+    imageContainer.appendChild(dot);
+  });
+}
+
+resetMarksBtn.addEventListener('click',()=>{
+  if(confirm('Clear all marks for this project? Image stays.')){
+    projects[currentProjectId].marks = [];
+    saveProjects();
+    updateStats();
+    drawMarks();
+  }
+});
+
+clearImageBtn.addEventListener('click',()=>{
+  if(confirm('Replace image? Progress will reset.')){
+    projects[currentProjectId].imageData = null;
+    projects[currentProjectId].marks = [];
+    projects[currentProjectId].totalSections = null;
+    saveProjects();
+    loadProjectData();
+  }
+});
+
+window.addEventListener('resize', drawMarks);
+canvasImage.addEventListener('load', ()=>setTimeout(d
