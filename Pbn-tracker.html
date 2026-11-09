@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PBN Progress Tracker</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; font-family: sans-serif; }
+  body { background: #f8f9fa; color: #333; padding: 16px; max-width: 800px; margin: 0 auto; }
+  h1 { text-align: center; color: #e91e63; margin-bottom: 12px; font-size: 22px; }
+  
+  .upload-box { border: 2px dashed #ccc; border-radius: 12px; padding: 30px; text-align: center; margin-bottom: 16px; background: white; cursor: pointer; transition: all 0.2s; }
+  .upload-box:hover { border-color: #e91e63; background: #fff0f6; }
+  .upload-box p { color: #666; margin-top: 8px; }
+  
+  .total-box { background: white; border-radius: 12px; padding: 16px; margin-bottom: 16px; box-shadow: 0 2px 6px rgba(0,0,0,0.06); }
+  .total-box label { font-size: 15px; font-weight: 500; display: block; margin-bottom: 8px; color: #444; }
+  .total-box input { padding: 10px; font-size: 16px; width: 120px; border: 2px solid #ddd; border-radius: 8px; outline: none; }
+  .total-box input:focus { border-color: #e91e63; }
+  .total-box button { margin-left: 8px; padding: 10px 16px; background: #e91e63; color: white; border: none; border-radius: 8px; font-size: 14px; cursor: pointer; }
+  
+  .stats-bar { background: white; border-radius: 12px; padding: 16px; margin-bottom: 16px; box-shadow: 0 2px 6px rgba(0,0,0,0.06); }
+  .progress-text { display: flex; justify-content: space-between; font-size: 16px; font-weight: 600; margin-bottom: 8px; }
+  .progress-bar { height: 24px; background: #eee; border-radius: 12px; overflow: hidden; }
+  .progress-fill { height: 100%; background: linear-gradient(90deg, #e91e63, #ff6b9d); width: 0%; transition: width 0.3s ease; border-radius: 12px; }
+  
+  .image-container { position: relative; overflow: auto; border-radius: 12px; background: white; box-shadow: 0 2px 8px rgba(0,0,0,0.08); margin-bottom: 16px; min-height: 200px; }
+  #canvas-image { display: block; max-width: 100%; height: auto; user-select: none; }
+  
+  .instructions { background: #eef2ff; border-radius: 8px; padding: 12px; font-size: 14px; line-height: 1.5; margin-bottom: 16px; }
+  .instructions strong { color: #4338ca; }
+  
+  .btn-bar { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px; }
+  button { padding: 10px 16px; border: none; border-radius: 8px; font-size: 14px; font-weight: 500; cursor: pointer; transition: all 0.2s; }
+  .btn-reset { background: #fee2e2; color: #b91c1c; }
+  .btn-reset:hover { background: #fecaca; }
+  .btn-clear-img { background: #e2e8f0; color: #475569; }
+  .btn-clear-img:hover { background: #cbd5e1; }
+  
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<h1>🎨 PBN Progress Tracker</h1>
+
+<div class="upload-box" id="upload-area">
+  <strong>📷 Tap here to upload your canvas image</strong>
+  <p>Your progress saves automatically on your phone</p>
+  <input type="file" id="file-input" accept="image/*" class="hidden">
+</div>
+
+<div class="total-box hidden" id="total-section">
+  <label>🔢 Total sections on your canvas:</label>
+  <input type="number" id="total-input" placeholder="e.g. 240" min="1">
+  <button id="set-total">Set Total</button>
+</div>
+
+<div class="stats-bar hidden" id="stats-section">
+  <div class="progress-text">
+    <span>✅ Done: <span id="completed">0</span> / <span id="total-display">0</span></span>
+    <span>📊 <span id="percentage">0</span>%</span>
+  </div>
+  <div class="progress-bar">
+    <div class="progress-fill" id="progress-fill"></div>
+  </div>
+</div>
+
+<div class="instructions hidden" id="instructions-section">
+  <strong>How to use:</strong><br>
+  1. Enter the total number of sections on your canvas and tap "Set Total" 🔢<br>
+  2. Tap anywhere on the canvas to mark a section as done ✅<br>
+  3. Tap a green dot again to undo if you make a mistake ↩️<br>
+  4. Zoom in/out with pinch to see small numbers 🔍<br>
+  5. Progress saves automatically — close and come back anytime! 💾
+</div>
+
+<div class="image-container hidden" id="image-container">
+  <img id="canvas-image" alt="Your canvas">
+</div>
+
+<div class="btn-bar hidden" id="btn-bar">
+  <button class="btn-reset" id="reset-marks">🔄 Reset all marks</button>
+  <button class="btn-clear-img" id="clear-image">🗑️ New project</button>
+</div>
+
+<script>
+const uploadArea = document.getElementById('upload-area');
+const fileInput = document.getElementById('file-input');
+const totalSection = document.getElementById('total-section');
+const totalInput = document.getElementById('total-input');
+const setTotalBtn = document.getElementById('set-total');
+const statsSection = document.getElementById('stats-section');
+const instructionsSection = document.getElementById('instructions-section');
+const imageContainer = document.getElementById('image-container');
+const canvasImage = document.getElementById('canvas-image');
+const completedEl = document.getElementById('completed');
+const totalDisplayEl = document.getElementById('total-display');
+const percentageEl = document.getElementById('percentage');
+const progressFill = document.getElementById('progress-fill');
+const resetMarksBtn = document.getElementById('reset-marks');
+const clearImageBtn = document.getElementById('clear-image');
+const btnBar = document.getElementById('btn-bar');
+
+let marks = [];
+let totalSections = null;
+let imageLoaded = false;
+
+// Load saved data on startup
+window.addEventListener('load', () => {
+  const savedImage = localStorage.getItem('pbnImage');
+  const savedMarks = localStorage.getItem('pbnMarks');
+  const savedTotal = localStorage.getItem('pbnTotal');
+  
+  if (savedTotal) {
+    totalSections = parseInt(savedTotal, 10);
+    totalInput.value = totalSections;
+    totalDisplayEl.textContent = totalSections;
+  }
+  
+  if (savedImage) {
+    canvasImage.src = savedImage;
+    imageLoaded = true;
+    showUI();
+    if (savedMarks) {
+      marks = JSON.parse(savedMarks);
+      updateStats();
+    }
+  }
+});
+
+uploadArea.addEventListener('click', () => fileInput.click());
+
+fileInput.addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  
+  const reader = new FileReader();
+  reader.onload = (event) => {
+    const dataUrl = event.target.result;
+    canvasImage.src = dataUrl;
+    localStorage.setItem('pbnImage', dataUrl);
+    imageLoaded = true;
+    showUI();
+    marks = [];
+    saveMarks();
+    updateStats();
+  };
+  reader.readAsDataURL(file);
+});
+
+setTotalBtn.addEventListener('click', () => {
+  const val = parseInt(totalInput.value, 10);
+  if (!val || val < 1) {
+    alert('Please enter a valid number!');
+    return;
+  }
+  totalSections = val;
+  localStorage.setItem('pbnTotal', totalSections);
+  totalDisplayEl.textContent = totalSections;
+  updateStats();
+});
+
+function showUI() {
+  uploadArea.classList.add('hidden');
+  totalSection.classList.remove('hidden');
+  instructionsSection.classList.remove('hidden');
+  imageContainer.classList.remove('hidden');
+  btnBar.classList.remove('hidden');
+  if (totalSections) statsSection.classList.remove('hidden');
+}
+
+canvasImage.addEventListener('click', (e) => {
+  if (!imageLoaded) return;
+  
+  const rect = canvasImage.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+  const relX = x / rect.width;
+  const relY = y / rect.height;
+  
+  // Check if clicking an existing mark
+  const threshold = 0.025;
+  let foundIndex = -1;
+  for (let i = 0; i < marks.length; i++) {
+    const m = marks[i];
+    if (Math.abs(m.x - relX) < threshold && Math.abs(m.y - relY) < threshold) {
+      foundIndex = i;
+      break;
+    }
+  }
+  
+  if (foundIndex >= 0) {
+    // Remove existing mark
+    marks.splice(foundIndex, 1);
+  } else {
+    // Add new mark
+    marks.push({ x: relX, y: relY });
+  }
+  
+  saveMarks();
+  updateStats();
+  drawMarks();
+});
+
+function saveMarks() {
+  localStorage.setItem('pbnMarks', JSON.stringify(marks));
+}
+
+function updateStats() {
+  const count = marks.length;
+  completedEl.textContent = count;
+  
+  if (totalSections && totalSections > 0) {
+    statsSection.classList.remove('hidden');
+    const percent = Math.round((count / totalSections) * 100);
+    percentageEl.textContent = percent;
+    progressFill.style.width = Math.min(percent, 100) + '%';
+  } else {
+    percentageEl.textContent = '—';
+    progressFill.style.width = '0%';
+  }
+}
+
+function drawMarks() {
+  // Remove old markers
+  document.querySelectorAll('.pbn-marker').forEach(el => el.remove());
+  
+  const rect = canvasImage.getBoundingClientRect();
+  
+  marks.forEach(m => {
+    const dot = document.createElement('div');
+    dot.className = 'pbn-marker';
+    dot.style.position = 'absolute';
+    dot.style.left = (m.x * rect.width - 8) + 'px';
+    dot.style.top = (m.y * rect.height - 8) + 'px';
+    dot.style.width = '16px';
+    dot.style.height = '16px';
+    dot.style.background = '#22c55e';
+    dot.style.borderRadius = '50%';
+    dot.style.border = '2px solid white';
+    dot.style.boxShadow = '0 2px 4px rgba(0,0,0,0.2)';
+    dot.style.pointerEvents = 'none';
+    imageContainer.appendChild(dot);
+  });
+}
+
+// Redraw markers on window resize
+window.addEventListener('resize', drawMarks);
+canvasImage.addEventListener('load', () => setTimeout(drawMarks, 50));
+
+resetMarksBtn.addEventListener('click', () => {
+  if (confirm('Clear all marks? Image and total will stay.')) {
+    marks = [];
+    saveMarks();
+    updateStats();
+    drawMarks();
+  }
+});
+
+clearImageBtn.addEventListener('click', () => {
+  if (confirm('Start a new project? All progress will be lost.')) {
+    localStorage.removeItem('pbnImage');
+    localStorage.removeItem('pbnMarks');
+    localStorage.removeItem('pbnTotal');
+    marks = [];
+    totalSections = null;
+    imageLoaded = false;
+    location.reload();
+  }
+});
+</script>
+</body>
+</html>
